@@ -51,7 +51,6 @@ sc = MinMaxScaler(feature_range = (0, 1))
 training_set_scaled = sc.fit_transform(training_set)
 # print(training_set_scaled.shape)
 
-
 # LSTMs expect the data in a specific format, usually a 3D tensor. I start by creating data with 60 days and converting it into an array using NumPy. 
 # Next, I convert the data into a 3D dimension array with feature_set samples, 60 days and one feature at each step.
 features = []
