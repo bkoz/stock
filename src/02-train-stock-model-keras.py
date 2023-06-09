@@ -1,20 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
-
-# # Predict stock prices  with Long short-term memory (LSTM)
-
+#
+# Predict stock prices with Long short-term memory (LSTM)
 # This simple example will show you how LSTM models predict time series data. Stock market data is a great choice for this because it's quite regular and widely available via the Internet. 
+#
 
-# ## Install requirements
-# We install Tensorflow 2.0 with GPU support first
-# _datareader -Uq --no-cache-dir')
-
-# ## Introduction
-
+# Introduction
 # LSTMs are very powerful in sequence prediction problems. They can store past information.
-
-# ## Loading the dataset
-# I use pandas-datareader to get the historical stock prices from Yahoo! finance. For this example, I get only the historical data till the end of *training_end_data*.  
+# Loading the dataset
+# Use the pandas-data reader to get the historical stock prices from Yahoo! finance. 
+# For this example, I get only the historical data till the end of *training_end_data*.  
 
 import numpy as np
 import matplotlib.pyplot as plt
