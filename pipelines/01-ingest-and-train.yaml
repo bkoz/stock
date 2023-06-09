@@ -48,3 +48,11 @@ spec:
       params:
         - name: IMAGE
           value: $(params.IMAGE)
+    - name: run-yahoo2csv
+      taskRef:
+        name: run-yahoo2csv
+      workspaces:
+      - name: source
+        workspace: shared-workspace
+      runAfter:
+      - build
