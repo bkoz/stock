@@ -1,12 +1,13 @@
 # Experiment with predicting stock prices using Long Short-Term Memory (LSTM)
 
 ### Prerequisites
-- An Openshift 4.12+ cluster
+- An Openshift 4.11+ cluster
+- The Pipelines Operator
 - The `oc` and `tkn` command line tools (See the question mark menu in the Openshift UI)
 
 ### Files and directories
 ```
-├── src                             Python source for Data ingestion and model training
+├── src                             Python source for data ingestion and model training
 ├── pipelines                       Tekton pipeline and tasks 
 ├── data                            Sample data
 ├── notebooks                       Jupyter experimentation
