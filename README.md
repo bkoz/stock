@@ -27,7 +27,11 @@ kfp-tekton-server-api    1.5.0
 
 ### Environment Variables (.env file)
 ```
-
+ACCESS_KEY=<s3-access-key>
+SECRET_KEY=<s3-secret=key>
+S3_ENDPOINT=<for-minio-use-external-route>
+KUBEFLOW_ENDPOINT=<external-route-created-by-pipeline-server>
+BEARER_TOKEN=<oc_whoami_--show-token>
 ```
 ### Pipeline example
 ```
@@ -37,8 +41,8 @@ python 01-ingest-train.py
 ### Monitoring pipeline runs
 ```
 tkn pipelineruns list
+tkn pipelineruns logs <run-id>
 ```
 
-
 ### References
-[Trevor's examples](https://github.com)
+[Trevor's examples](https://github.com/rh-datascience-and-edge-practice/kubeflow-examples.git)
