@@ -2,9 +2,19 @@
 
 ## Prerequisites
 - An Openshift 4.11+ cluster
-- The Pipelines Operator
+- The Openshift Pipelines Operator
 - The `oc` and `tkn` command line tools (See the question mark menu in the Openshift UI)
 - An Openshift project to work with
+
+The version of `kfp-tekton` is important for launching pipeline runs
+via the python sdk against the Openshift Kubeflow Pipeline API Server.
+```
+kfp                      1.8.19
+kfp-pipeline-spec        0.1.16
+kfp-server-api           1.8.5
+kfp-tekton               1.5.2
+kfp-tekton-server-api    1.5.0
+```
 
 ### Files and directories
 ```
@@ -15,43 +25,20 @@
 └── requirements.txt                Python dependencies
 ```
 
+### Environment Variables (.env file)
+```
+
+```
 ### Pipeline example
 ```
-cd pipelines
+python 01-ingest-train.py
 ```
 
-Apply the custom tasks and pipeline resources.
+### Monitoring pipeline runs
 ```
-oc apply -f pipelines/01-ingest-train-task.yaml
-oc apply -f pipelines/02-ingest-train-pipeline.yaml
-```
-
-### Create a PVC
-
--> Use the Openshift UI to manually create a storage persistent volume claim (PVC) and 
-pass its name in when starting the pipeline below.
-
-### Start a pipeline run
-```
-tkn pipeline start ingest-and-train -w name=shared-workspace,claimName=my-pipeline-claim-01 -p deployment-name=ingest-and-train -p git-url=https://github.com/bkoz/stock.git -p IMAGE='image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/ingest-and-train' --use-param-defaults
+tkn pipelineruns list
 ```
 
-### -> Optional: Auto-create a pvc when starting the pipeline. 
-
-This requires further investigation as the PVCs don't get deleted when the pipeline gets deleted.
-
-```
-tkn pipeline start ingest-and-train -w name=shared-workspace,volumeClaimTemplateFile=00-persistent-volume-claim.yaml -p deployment-name=ingest-and-train -p git-url=https://github.com/bkoz/stock.git -p IMAGE='image-registry.openshift-image-registry.svc:5000/$(context.pipelineRun.namespace)/ingest-and-train' --use-param-defaults
-```
-
-### TODOs
-- Integrate s3 storage into the `ingest` and `training` tasks.
-  - Ingest the csv file from s3 vs. the yahoo finance service.
-  - Save the trained model artifact to s3 storage so the Triton server can find it.
 
 ### References
-[Data streamer sample](https://github.com/redhat-na-ssa/ml_data_streamer/blob/main/source-eip/src/test/resources/samples/MUFG-1.csv)
-
-[Custom Notebook Builder](https://github.com/redhat-na-ssa/rhods-custom-notebook-example.git)
-
-[Pipeline examples](https://github.com/rh-datascience-and-edge-practice/kubeflow-examples/blob/main/pipelines/11_iris_training_pipeline.py)
+[Trevor's examples](https://github.com)
