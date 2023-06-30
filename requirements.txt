@@ -9,5 +9,5 @@ scikit-learn
 minio
 tf2onnx
 kfp
-kfp-tekton
+kfp-tekton==1.5.4
 python-dotenv

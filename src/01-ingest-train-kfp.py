@@ -1,3 +1,4 @@
+import kfp
 import kfp.dsl as dsl
 import kfp.components as comp
 from kubernetes.client.models import V1EnvVar
@@ -6,7 +7,7 @@ import os
 #
 # Read stock market data from Yahoo and save to a csv file.
 #
-def ingest(ticker: str) -> str:
+def ingest(ticker: str, filename: kfp.components.OutputPath(str)) -> str:
     
     from pandas_datareader import data as pdr
     import numpy as np
@@ -45,13 +46,14 @@ def ingest(ticker: str) -> str:
 
     load_dotenv(override=True)
     # ticker = "IBM"
-    filename = ticker + ".csv"
+    # filename = ticker + ".csv"
     yf.pdr_override()
     df = pdr.get_data_yahoo(ticker, start="2023-01-01", end="2023-06-01")
     # print(f'******* Env ACCESS_KEY = {os.getenv("ACCESS_KEY")}')
     # print(f'******* Env SECRET_KEY = {os.getenv("SECRET_KEY")}')
     print(f'******* Env S3_ENDPOINT = {os.getenv("S3_ENDPOINT")}')
     print(f'******* Ticker = {ticker}')
+    print(f"Saving {filename} to local storage.")
     df.to_csv(filename)
     fd = open(filename,'r')
     d = fd.read()
@@ -62,12 +64,28 @@ def ingest(ticker: str) -> str:
     # If I print the file contents, they get stored as an artifact.
     #
     # print(d)
+    print("Finished ingest()")
     return "Finished ingest()"
 
 #
 # Create the data ingest component.
 #
 ingest_op = comp.create_component_from_func(ingest, base_image='quay.io/bkozdemb/pipestage:latest')
+
+#
+# Train function
+#
+def train(csv_file: kfp.components.InputPath()):
+    import pandas as pd
+    print(f'CSV file = {csv_file}')
+    df = pd.read_csv(csv_file)
+    print(df.head())
+    return True
+
+#
+# Create the data ingest component.
+#
+train_op = comp.create_component_from_func(train, base_image='quay.io/bkozdemb/pipestage:latest')
 
 # Define a Python function
 def add(a: float, b: float) -> float:
@@ -127,16 +145,11 @@ def my_divmod(dividend: float, divisor:float) -> NamedTuple('MyDivmodOutput', [(
    name='ingest-train-pipeline',
    description='A simple pipeline that downloads stock data and saves it.'
 )
-
-# Currently kfp-tekton doesn't support pass parameter to the pipelinerun yet, so we hard code the number here
 #
-# Change input parm to ticker: str
+# Currently kfp-tekton doesn't support paremeter passing to the pipelinerun yet, 
+# so we hard code the ticker string here.
 #
-def ingest_train_pipeline(
-   a:float = 7.0,
-   b:float = 8.0,
-   c:float = 17.0,
-):
+def ingest_train_pipeline(ticker = 'IBM'):
     # Passing pipeline parameter and a constant value as operation arguments
     # add_task = add_op(a, 4) # Returns a dsl.ContainerOp class instance.
     from dotenv import load_dotenv
@@ -149,10 +162,12 @@ def ingest_train_pipeline(
     # env_var_02 = V1EnvVar(name='ACCESS_KEY', value=access_key)
     # env_var_03 = V1EnvVar(name='SECRET_KEY', value=secret_key)
     # ingest_task = ingest_op('IBM').add_env_variable(env_var_01).add_env_variable(env_var_02).add_env_variable(env_var_03)
-    ingest_task = ingest_op('IBM')\
+    ingest_task = ingest_op(ticker)\
       .add_env_variable(V1EnvVar(name='S3_ENDPOINT', value=os.getenv('S3_ENDPOINT')))\
       .add_env_variable(V1EnvVar(name='ACCESS_KEY', value=os.getenv('ACCESS_KEY')))\
       .add_env_variable(V1EnvVar(name='SECRET_KEY', value=os.getenv('SECRET_KEY')))
+
+    train_task = train_op(ingest_task.outputs['filename'])
 
     # Passing a task output reference as operation arguments
     # For an operation with a single return value, the output reference can be accessed using `task.output` or
