@@ -1,13 +1,15 @@
 import kfp
 import kfp.dsl as dsl
 import kfp.components as comp
+from kfp.components import func_to_container_op, InputPath, OutputPath
 from kubernetes.client.models import V1EnvVar
 import os
 
 #
 # Read stock market data from Yahoo and save to a csv file.
 #
-def ingest(ticker: str, filename: kfp.components.OutputPath(str)) -> str:
+# @func_to_container_op
+def ingest(ticker: str, out_value: OutputPath(str)) -> str:
     
     from pandas_datareader import data as pdr
     import numpy as np
@@ -19,7 +21,7 @@ def ingest(ticker: str, filename: kfp.components.OutputPath(str)) -> str:
     from minio import Minio
     from minio.error import S3Error
 
-    def push_data(bucket: str, filename: str):
+    def push_data(bucket: str, out_value: str):
         # Create a client with the MinIO server playground, its access key
         # and secret key.
         client = Minio(
@@ -34,11 +36,11 @@ def ingest(ticker: str, filename: kfp.components.OutputPath(str)) -> str:
             print(f"Bucket {bucket} already exists")
 
         #
-        # Upload 'filename' as object name
-        # 'filename' to the bucket 'bucket'.
+        # Upload 'out_value' as object name
+        # 'out_value' to the bucket 'bucket'.
         #
         try:
-            client.fput_object(bucket, filename, filename)
+            client.fput_object(bucket, out_value, out_value)
 
         except S3Error as err:
             print(err)
@@ -49,13 +51,13 @@ def ingest(ticker: str, filename: kfp.components.OutputPath(str)) -> str:
     df = pdr.get_data_yahoo(ticker, start="2023-01-01", end="2023-06-01")
     print(f'******* Env S3_ENDPOINT = {os.getenv("S3_ENDPOINT")}')
     print(f'******* Ticker = {ticker}')
-    print(f"Saving {filename} to local storage.")
-    df.to_csv(filename)
-    fd = open(filename,'r')
+    print(f"Saving {out_value} to local storage.")
+    df.to_csv(out_value)
+    fd = open(out_value,'r')
     d = fd.read()
     fd.close()
-    print(f"Pushing {filename} to object store.")
-    push_data('data', filename)
+    print(f"Pushing {out_value} to object store.")
+    push_data('data', out_value)
     #
     # If I print the file contents, they get stored as an artifact.
     #
@@ -68,10 +70,12 @@ def ingest(ticker: str, filename: kfp.components.OutputPath(str)) -> str:
 #
 ingest_op = comp.create_component_from_func(ingest, base_image='quay.io/bkozdemb/pipestage:latest')
 
+
 #
 # Train function
 #
-def train(csv_file: kfp.components.InputPath()):
+# @func_to_container_op
+def train(csv_file: kfp.components.InputPath(), plotfile: kfp.components.OutputPath(str)) -> str:
     import pandas as pd
     print(f'CSV file = {csv_file}')
     df = pd.read_csv(csv_file)
@@ -101,6 +105,81 @@ def train(csv_file: kfp.components.InputPath()):
     import onnx
     import glob
     from dotenv import load_dotenv
+
+    def push_file_to_s3(bucket: str, filename: str) -> None:
+        # Create a client with the MinIO server playground, its access key
+        # and secret key.
+        client = Minio(
+            os.getenv("S3_ENDPOINT"), os.getenv("ACCESS_KEY"), os.getenv("SECRET_KEY")
+        )
+
+        # Create a 'models' bucket if it does not exist.
+        found = client.bucket_exists(bucket)
+        if not found:
+            client.make_bucket(bucket)
+        else:
+            print("Bucket already exists")
+
+        # Upload 'stocks.onnx' as object name
+        # 'stock-model.onnx' to the bucket 'models'.
+        #
+        # fput_object(<bucket>, <destination-out_value>, <source-out_value>)
+        #
+        try:
+            client.fput_object(bucket, filename, filename)
+
+        except S3Error as err:
+            print(err)
+
+
+    def push_model():
+        # Create a client with the MinIO server playground, its access key
+        # and secret key.
+        client = Minio(
+            os.getenv("S3_ENDPOINT"), os.getenv("ACCESS_KEY"), os.getenv("SECRET_KEY")
+        )
+
+        # Create a 'models' bucket if it does not exist.
+        found = client.bucket_exists("models")
+        if not found:
+            client.make_bucket("models")
+        else:
+            print("Bucket 'models' already exists")
+
+        # Upload 'stocks.onnx' as object name
+        # 'stock-model.onnx' to the bucket 'models'.
+        #
+        # fput_object(<bucket>, <destination-out_value>, <source-out_value>)
+        #
+        try:
+            client.fput_object("models", "stocks.onnx", "stocks.onnx")
+
+        except S3Error as err:
+            print(err)
+
+
+    def upload_local_directory_to_minio(local_path, bucket_name, minio_path):
+        # Create a client with the MinIO server playground, its access key
+        # and secret key.
+        client = Minio(
+            os.getenv("S3_ENDPOINT"), os.getenv("ACCESS_KEY"), os.getenv("SECRET_KEY")
+        )
+
+        assert os.path.isdir(local_path)
+
+        for local_file in glob.glob(local_path + "/**"):
+            local_file = local_file.replace(os.sep, "/")  # Replace \ with / on Windows
+            if not os.path.isfile(local_file):
+                upload_local_directory_to_minio(
+                    local_file, bucket_name, minio_path + "/" + os.path.basename(local_file)
+                )
+            else:
+                remote_path = os.path.join(minio_path, local_file[1 + len(local_path) :])
+                remote_path = remote_path.replace(
+                    os.sep, "/"
+                )  # Replace \ with / on Windows
+                client.fput_object(bucket_name, remote_path, local_file)
+
 
     load_dotenv(override=True)
     print(f'******* Env ACCESS_KEY = {os.getenv("ACCESS_KEY")}')
@@ -238,77 +317,73 @@ def train(csv_file: kfp.components.InputPath()):
     predicted_stock_price = model.predict(X_test)
     predicted_stock_price = sc.inverse_transform(predicted_stock_price)
 
-
-    def push_model():
-        # Create a client with the MinIO server playground, its access key
-        # and secret key.
-        client = Minio(
-            os.getenv("S3_ENDPOINT"), os.getenv("ACCESS_KEY"), os.getenv("SECRET_KEY")
-        )
-
-        # Create a 'models' bucket if it does not exist.
-        found = client.bucket_exists("models")
-        if not found:
-            client.make_bucket("models")
-        else:
-            print("Bucket 'models' already exists")
-
-        # Upload 'stocks.onnx' as object name
-        # 'stock-model.onnx' to the bucket 'models'.
-        #
-        # fput_object(<bucket>, <destination-filename>, <source-filename>)
-        #
-        try:
-            client.fput_object("models", "stocks.onnx", "stocks.onnx")
-
-        except S3Error as err:
-            print(err)
-
-
-    def upload_local_directory_to_minio(local_path, bucket_name, minio_path):
-        # Create a client with the MinIO server playground, its access key
-        # and secret key.
-        client = Minio(
-            os.getenv("S3_ENDPOINT"), os.getenv("ACCESS_KEY"), os.getenv("SECRET_KEY")
-        )
-
-        assert os.path.isdir(local_path)
-
-        for local_file in glob.glob(local_path + "/**"):
-            local_file = local_file.replace(os.sep, "/")  # Replace \ with / on Windows
-            if not os.path.isfile(local_file):
-                upload_local_directory_to_minio(
-                    local_file, bucket_name, minio_path + "/" + os.path.basename(local_file)
-                )
-            else:
-                remote_path = os.path.join(minio_path, local_file[1 + len(local_path) :])
-                remote_path = remote_path.replace(
-                    os.sep, "/"
-                )  # Replace \ with / on Windows
-                client.fput_object(bucket_name, remote_path, local_file)
-
-
     print("Pushing model to object storage...")
     print(f'S3_ENDPOINT = {os.getenv("S3_ENDPOINT")},ACCESS_KEY = {os.getenv("ACCESS_KEY")}, SECRET_KEY = {os.getenv("SECRET_KEY")}')
     push_model()
     upload_local_directory_to_minio("stocks", "models", "stocks")
+
     #
     # Plots
     #
-    # plt.figure(figsize=(10,6))
-    # plt.plot(test_stock_data_processed, color='blue', label='Actual Apple Stock Price')
-    # plt.plot(predicted_stock_price , color='red', label='Predicted Apple Stock Price')
-    # plt.title('Apple Stock Price Prediction')
-    # plt.xlabel('Date')
-    # plt.ylabel('Apple Stock Price')
-    # plt.legend()
-    # plt.show()
-    return True
+    plt.figure(figsize=(10,6))
+    plt.plot(test_stock_data_processed, color='blue', label=f'Actual Stock Price')
+    plt.plot(predicted_stock_price , color='red', label=f'Predicted Stock Price')
+    plt.title('Stock Price Prediction')
+    plt.xlabel('Date')
+    plt.ylabel(f'Stock Price')
+    plt.legend()
+    plt.savefig('plot.png')
+    plt.show()
+    push_file_to_s3('plots', 'plot.png')
+    return "train() finished"
 
 #
 # Create the data ingest component.
 #
 train_op = comp.create_component_from_func(train, base_image='quay.io/bkozdemb/pipestage:latest')
+
+#
+# Validate
+#
+# @func_to_container_op
+def validate(plotfile: kfp.components.InputPath()) -> str:
+
+    from minio import Minio
+    from minio.error import S3Error
+    import os
+    from dotenv import load_dotenv
+    
+    def push_s3(bucket: str, out_value: str):
+        load_dotenv(override=True)
+
+        # Create a client with the MinIO server playground, its access key
+        # and secret key.
+        client = Minio(
+            os.getenv("S3_ENDPOINT"), os.getenv("ACCESS_KEY"), os.getenv("SECRET_KEY")
+        )
+
+        # Create a bucket if it does not exist.
+        found = client.bucket_exists(bucket)
+        if not found:
+            client.make_bucket(bucket)
+        else:
+            print(f"Bucket {bucket} already exists")
+
+        #
+        # Upload 'out_value' as object name
+        # 'out_value' to the bucket 'bucket'.
+        #
+        try:
+            client.fput_object(bucket, out_value, out_value)
+
+        except S3Error as err:
+            print(err)
+
+    print(f'Saving plotfile as {plotfile}.')
+    push_s3('plots', plotfile)
+    return "Finished validate()"
+
+validate_op = comp.create_component_from_func(validate, base_image='quay.io/bkozdemb/pipestage:latest')
 
 # Advanced function
 # Demonstrates imports, helper functions and multiple outputs
@@ -334,10 +409,15 @@ def ingest_train_pipeline(ticker = 'IBM'):
       .add_env_variable(V1EnvVar(name='ACCESS_KEY', value=os.getenv('ACCESS_KEY')))\
       .add_env_variable(V1EnvVar(name='SECRET_KEY', value=os.getenv('SECRET_KEY')))
 
-    train_task = train_op(ingest_task.outputs['filename'])\
+    train_task = train_op(ingest_task.outputs['out_value'])\
       .add_env_variable(V1EnvVar(name='S3_ENDPOINT', value=os.getenv('S3_ENDPOINT')))\
       .add_env_variable(V1EnvVar(name='ACCESS_KEY', value=os.getenv('ACCESS_KEY')))\
       .add_env_variable(V1EnvVar(name='SECRET_KEY', value=os.getenv('SECRET_KEY')))
+    
+    # validate_task = validate_op(train_task.outputs['plotfile'])\
+    #   .add_env_variable(V1EnvVar(name='S3_ENDPOINT', value=os.getenv('S3_ENDPOINT')))\
+    #   .add_env_variable(V1EnvVar(name='ACCESS_KEY', value=os.getenv('ACCESS_KEY')))\
+    #   .add_env_variable(V1EnvVar(name='SECRET_KEY', value=os.getenv('SECRET_KEY')))
 
 
 if __name__ == '__main__':
