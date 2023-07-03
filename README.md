@@ -64,6 +64,9 @@ SECRET_KEY=<s3-secret=key>
 S3_ENDPOINT=minio-<namespace>.apps.ocp.sandbox1234.opentlc.com
 KUBEFLOW_ENDPOINT=https://ds-pipeline-pipelines-definition-<namespace>.apps.ocp.sandbox1234.opentlc.com
 BEARER_TOKEN=<oc_whoami_--show-token>
+DEFAULT_STORAGE_CLASS=gp3-csi
+DEFAULT_STORAGE_SIZE=2Gi
+DEFAULT_ACCESSMODES=ReadWriteOnce
 ```
 ### Pipeline example
 ```
