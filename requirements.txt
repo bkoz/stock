@@ -1,4 +1,5 @@
 tensorflow
+numpy
 pandas-datareader
 pydot
 pydot-ng
@@ -7,7 +8,7 @@ pandas
 matplotlib
 scikit-learn
 minio
-tf2onnx
+tf2onnx==1.14
 kfp
-kfp-tekton==1.5.4
+kfp-tekton==1.5.2
 python-dotenv
