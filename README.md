@@ -79,5 +79,9 @@ tkn pipelineruns list
 tkn pipelineruns logs <run-id>
 ```
 
+### Storage 
+```
+s3cmd --access_key=<> --secret_key=<> --host=minio-pipelines-tutorial.apps.ocp.sandbox2000.opentlc.com ls --recursive s3://
+```
 ### References
 [Trevor's examples](https://github.com/rh-datascience-and-edge-practice/kubeflow-examples.git)
