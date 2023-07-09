@@ -70,35 +70,34 @@ features = np.reshape(features, (features.shape[0], features.shape[1], 1))
 # Create the LSTM network
 # Let's create a sequenced LSTM network with 50 units. Also the net includes some dropout layers with 0.2 which means that 20% of the neurons will be dropped.
 
-model = tf.keras.models.Sequential([
-    tf.keras.layers.LSTM(units = 50, return_sequences = True, input_shape = (features.shape[1], 1)),
-    tf.keras.layers.Dropout(0.2),
-    tf.keras.layers.LSTM(units = 50, return_sequences = True),
-    tf.keras.layers.Dropout(0.2),
-    tf.keras.layers.LSTM(units = 50, return_sequences = True),
-    tf.keras.layers.Dropout(0.2),
-    tf.keras.layers.LSTM(units = 50),
-    tf.keras.layers.Dropout(0.2),
-    tf.keras.layers.Dense(units = 1)
-])
+# model = tf.keras.models.Sequential([
+#     tf.keras.layers.LSTM(units = 50, return_sequences = True, input_shape = (features.shape[1], 1)),
+#     tf.keras.layers.Dropout(0.2),
+#     tf.keras.layers.LSTM(units = 50, return_sequences = True),
+#     tf.keras.layers.Dropout(0.2),
+#     tf.keras.layers.LSTM(units = 50, return_sequences = True),
+#     tf.keras.layers.Dropout(0.2),
+#     tf.keras.layers.LSTM(units = 50),
+#     tf.keras.layers.Dropout(0.2),
+#     tf.keras.layers.Dense(units = 1)
+# ])
+#
+# Load the model
+#
+model = tf.keras.models.load_model('stocks/1')
 
 print(model.summary())
 
 # The model will be compiled and optimize by the adam optimizer and set the loss function as mean_squarred_error
 
-model.compile(optimizer = 'adam', loss = 'mean_squared_error')
+# model.compile(optimizer = 'adam', loss = 'mean_squared_error')
 
-from time import time
-start = time()
-history = model.fit(features, labels, epochs = 50, batch_size = 32, verbose = 1)
-end = time()
+# from time import time
+# start = time()
+# history = model.fit(features, labels, epochs = 50, batch_size = 32, verbose = 1)
+# end = time()
 
-print('Total training time {} seconds'.format(end - start))
-
-#
-# Save the model
-#
-tf.keras.models.save_model(model, 'stocks/1')
+# print('Total training time {} seconds'.format(end - start))
 
 testing_start_date = '2019-01-01'
 testing_end_date = '2019-04-10'
@@ -125,12 +124,13 @@ predicted_stock_price = sc.inverse_transform(predicted_stock_price)
 #
 # Plots
 #
-# plt.figure(figsize=(10,6))  
-# plt.plot(test_stock_data_processed, color='blue', label='Actual Apple Stock Price')  
-# plt.plot(predicted_stock_price , color='red', label='Predicted Apple Stock Price')  
-# plt.title('Apple Stock Price Prediction')  
-# plt.xlabel('Date')  
-# plt.ylabel('Apple Stock Price')  
-# plt.legend()  
-# plt.show()  
+plt.figure(figsize=(10,6))  
+plt.plot(test_stock_data_processed, color='blue', label=f'Actual {tickers} Stock Price')  
+plt.plot(predicted_stock_price , color='red', label=f'Predicted {tickers} Stock Price')  
+plt.title(f'{tickers} Stock Price Prediction')  
+plt.xlabel('Date')  
+plt.ylabel('Price')  
+plt.legend()
+plt.savefig('plot.png')  
+plt.show()  
 
