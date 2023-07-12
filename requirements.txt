@@ -1,4 +1,5 @@
 tensorflow
+tensorflow_probability
 numpy
 pandas-datareader
 pydot
@@ -9,6 +10,7 @@ matplotlib
 scikit-learn
 minio
 tf2onnx==1.14
+onnx_tf
 kfp
 kfp-tekton==1.5.2
 python-dotenv

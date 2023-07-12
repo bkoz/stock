@@ -181,34 +181,140 @@ def train(csv_file: InputPath(), out_model: OutputPath(str)):
     model_proto, _ = tf2onnx.convert.from_keras(model)
     
     #
-    # Save the model locally.
+    # Save the model locally for testing/debug purposes.
     #
     onnx.save(model_proto, "stocks.onnx")
     
     #
     # Save the model to minio object store.
     #
-    print("Pushing model to object storage...")
+    print("Pushing model to object storage for production model serving ...")
     print(f'S3_ENDPOINT = {os.getenv("S3_ENDPOINT")},ACCESS_KEY = {os.getenv("ACCESS_KEY")}, SECRET_KEY = {os.getenv("SECRET_KEY")}')
     push_file_to_s3("models", "stocks.onnx")
     
     #
-    # Let KFP save the model artifact.
+    # Let KFP save the model artifact in TF format.
     #
     print(f"Saving the model artifact as {out_model}")
-    onnx.save(model_proto, out_model)
-    
+    # 
+    # Save in TF format
     #
-    # Placeholder for Tensorflow "saved_model" format.
-    #
-    # tf.keras.models.save_model(model, "stocks/1")
-    #
+    tf.keras.models.save_model(model, out_model)
 
+    #
+    # Example for onnx artifact format.
+    #
+    # onnx.save(model_proto, out_model)
+    #
 
 #
 # Create the train component.
 #
 train_op = comp.create_component_from_func(train, base_image='quay.io/bkozdemb/pipestage:latest')
+
+"""
+validate function
+"""
+def validate(model_file: InputPath(), plot_file: OutputPath("plot.png")):
+
+    import numpy as np 
+    import pandas as pd 
+    import matplotlib.pyplot as plt 
+    from pandas_datareader import data as pdr 
+    import yfinance as yf
+    import tensorflow as tf
+
+    # The ticker string should be passed in.
+    tickers = 'IBM'
+    start_date = '1980-12-01'
+    end_date = '2018-12-31'
+
+    yf.pdr_override()
+    stock_data = pdr.get_data_yahoo(tickers, start_date)
+
+    stock_data_len = stock_data['Close'].count()
+    print(f'Read in {stock_data_len} stock values')
+
+    close_prices = stock_data.iloc[:, 1:2].values
+
+    all_bussinessdays = pd.date_range(start=start_date, end=end_date, freq='B')
+    print(all_bussinessdays)
+
+    close_prices = stock_data.reindex(all_bussinessdays)
+    close_prices = stock_data.fillna(method='ffill')
+
+    # The dataset is now complete and free of missing values. Let's have a look to the data frame summary:
+    # Feature scaling
+
+    training_set = close_prices.iloc[:, 1:2].values
+
+    from sklearn.preprocessing import MinMaxScaler
+    sc = MinMaxScaler(feature_range = (0, 1))
+    training_set_scaled = sc.fit_transform(training_set)
+
+    # LSTMs expect the data in a specific format, usually a 3D tensor. I start by creating data with 60 days and converting it into an array using NumPy. 
+    # Next, I convert the data into a 3D dimension array with feature_set samples, 60 days and one feature at each step.
+    features = []
+    labels = []
+    for i in range(60, stock_data_len):
+        features.append(training_set_scaled[i-60:i, 0])
+        labels.append(training_set_scaled[i, 0])
+
+    features = np.array(features)
+    labels = np.array(labels)
+    features = np.reshape(features, (features.shape[0], features.shape[1], 1))
+    #
+    # Load the model
+    #
+    print(f"Loading the onnx model: {model_file}")
+    model = tf.keras.models.load_model(model_file)
+    print(model.summary())
+
+    #
+    # Prepare the validation data.
+    #
+    testing_start_date = '2019-01-01'
+    testing_end_date = '2019-04-10'
+
+    test_stock_data = pdr.get_data_yahoo(tickers, testing_start_date, testing_end_date)
+    test_stock_data_processed = test_stock_data.iloc[:, 1:2].values
+    all_stock_data = pd.concat((stock_data['Close'], test_stock_data['Close']), axis = 0)
+
+    inputs = all_stock_data[len(all_stock_data) - len(test_stock_data) - 60:].values
+    inputs = inputs.reshape(-1,1)
+    inputs = sc.transform(inputs)
+
+    X_test = []
+    for i in range(60, 129):
+        X_test.append(inputs[i-60:i, 0])
+
+    X_test = np.array(X_test)
+    X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+    #
+    # Perform a batch validation against the saved model.
+    #
+    predicted_stock_price = model.predict(X_test)
+    predicted_stock_price = sc.inverse_transform(predicted_stock_price)
+
+    print(f"Predicted stock prices: {predicted_stock_price}")
+    
+    #
+    # Optional plots
+    #
+    plt.figure(figsize=(10,6))  
+    plt.plot(test_stock_data_processed, color='blue', label=f'Actual {tickers} Stock Price')  
+    plt.plot(predicted_stock_price , color='red', label=f'Predicted {tickers} Stock Price')  
+    plt.title(f'{tickers} Stock Price Prediction')  
+    plt.xlabel('Date')  
+    plt.ylabel('Price')  
+    plt.legend()
+    plt.savefig(plot_file)  
+    plt.show()
+    print(f"Saving plot artifact as {plot_file}")
+#
+# Create the validate component.
+#
+validate_op = comp.create_component_from_func(validate, base_image='quay.io/bkozdemb/pipestage:latest')
 
 #
 # Define the pipeline.
@@ -227,6 +333,8 @@ def ingest_train_pipeline(ticker = 'IBM'):
     # Passing pipeline parameter and a constant value as operation arguments
     # add_task = add_op(a, 4) # Returns a dsl.ContainerOp class instance.
     from dotenv import load_dotenv
+    import json
+
 
     load_dotenv(override=True)
     ingest_task = ingest_op(ticker)\
@@ -238,7 +346,9 @@ def ingest_train_pipeline(ticker = 'IBM'):
       .add_env_variable(V1EnvVar(name='S3_ENDPOINT', value=os.getenv('S3_ENDPOINT')))\
       .add_env_variable(V1EnvVar(name='ACCESS_KEY', value=os.getenv('ACCESS_KEY')))\
       .add_env_variable(V1EnvVar(name='SECRET_KEY', value=os.getenv('SECRET_KEY')))
-    
+
+    validate_task = validate_op(train_task.outputs['out_model']).add_pod_annotation(name='artifact_outputs', value=json.dumps(['plot_file']))
+
 if __name__ == '__main__':
 
     import kfp_tekton
