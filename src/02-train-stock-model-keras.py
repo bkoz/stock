@@ -90,7 +90,7 @@ model.compile(optimizer = 'adam', loss = 'mean_squared_error')
 
 from time import time
 start = time()
-history = model.fit(features, labels, epochs = 50, batch_size = 32, verbose = 1)
+history = model.fit(features, labels, epochs = 5, batch_size = 32, verbose = 1)
 end = time()
 
 print('Total training time {} seconds'.format(end - start))

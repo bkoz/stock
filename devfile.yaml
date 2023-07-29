@@ -21,6 +21,6 @@ commands:
       label: "Run application"
       component: tools
       workingDir: ${PROJECT_SOURCE}
-      commandLine: "python -v /home/user/.venv && source /home/user/.venv/bin/activate && python --version"
+      commandLine: "python --version"
       group:
         kind: run
